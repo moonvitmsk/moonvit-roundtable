@@ -1,12 +1,14 @@
-
 import { useState } from "react";
 import type { AgentConfig, Phase, RoundtableTemplate } from "@/lib/types";
+import type { PromptConfig } from "@/lib/prompt-presets";
+import { COMPANY_CONTEXT_DEFAULT, GOAL_PRESETS, TASK_PRESETS, buildFullPrompt } from "@/lib/prompt-presets";
 import { AgentPicker } from "./AgentPicker";
+import { PromptConfigurator } from "./PromptConfigurator";
 import { ArrowLeft, Play } from "lucide-react";
 
 interface Props {
   template: RoundtableTemplate;
-  onStart: (topic: string, agents: AgentConfig[], phases: Phase[]) => void;
+  onStart: (topic: string, agents: AgentConfig[], phases: Phase[], brandContext: string) => void;
   onBack: () => void;
 }
 
@@ -16,6 +18,12 @@ export function SessionSetup({ template, onStart, onBack }: Props) {
   const [enabledPhases, setEnabledPhases] = useState<Set<string>>(
     new Set(template.phases.map((p) => p.id))
   );
+  const [promptConfig, setPromptConfig] = useState<PromptConfig>({
+    companyContext: COMPANY_CONTEXT_DEFAULT,
+    goals: GOAL_PRESETS[0].prompt,
+    taskType: TASK_PRESETS[0].agentInstruction,
+    customInstructions: "",
+  });
 
   const togglePhase = (id: string) => {
     setEnabledPhases((prev) => {
@@ -33,11 +41,12 @@ export function SessionSetup({ template, onStart, onBack }: Props) {
   const handleStart = () => {
     if (!topic.trim()) return;
     const activePhases = template.phases.filter((p) => enabledPhases.has(p.id));
-    onStart(topic.trim(), agents, activePhases);
+    const fullBrandContext = buildFullPrompt(promptConfig);
+    onStart(topic.trim(), agents, activePhases, fullBrandContext);
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
+    <div className="max-w-2xl mx-auto px-4 py-8 overflow-y-auto max-h-screen">
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors mb-6"
@@ -71,6 +80,8 @@ export function SessionSetup({ template, onStart, onBack }: Props) {
             autoFocus
           />
         </div>
+
+        <PromptConfigurator value={promptConfig} onChange={setPromptConfig} />
 
         <AgentPicker agents={agents} onChange={setAgents} />
 

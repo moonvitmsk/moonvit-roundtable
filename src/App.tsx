@@ -13,7 +13,7 @@ export default function App() {
   const [selectedTemplate, setSelectedTemplate] = useState<RoundtableTemplate | null>(null);
   const [session, setSession] = useState<Session | null>(null);
 
-  const handleStart = (topic: string, agents: AgentConfig[], phases: Phase[]) => {
+  const handleStart = (topic: string, agents: AgentConfig[], phases: Phase[], brandContext?: string) => {
     const s: Session = {
       id: crypto.randomUUID(),
       templateId: selectedTemplate!.id,
@@ -27,7 +27,7 @@ export default function App() {
       status: "setup",
       createdAt: Date.now(),
       ideas: [],
-      brandContext: selectedTemplate!.brandContext,
+      brandContext: brandContext || selectedTemplate!.brandContext,
     };
     setSession(s);
   };
