@@ -1,6 +1,6 @@
 import type { AgentConfig, ChatMessage, Phase, Session } from "./types";
 
-const MAX_RECENT_MESSAGES = 6;
+const MAX_RECENT_MESSAGES = 8;
 
 export function buildAgentContext(
   session: Session,
@@ -9,17 +9,17 @@ export function buildAgentContext(
 ): string {
   const parts: string[] = [];
 
-  parts.push(`# Тема обсуждения\n${session.topic}`);
-  parts.push(`\n# Текущая фаза: ${phase.icon} ${phase.name}\n${phase.description}`);
-  parts.push(`\n# Твоя задача на эту фазу\n${phase.agentInstruction}`);
+  parts.push(`# Тема: ${session.topic}`);
+  parts.push(`# Фаза: ${phase.icon} ${phase.name}`);
+  parts.push(`${phase.agentInstruction}`);
 
   if (phase.id === "generation") {
-    return parts.join("\n");
+    return parts.join("\n\n");
   }
 
   const prevPhaseMessages = getPreviousPhasesSummary(session, phase.id);
   if (prevPhaseMessages) {
-    parts.push(`\n# Резюме предыдущих фаз\n${prevPhaseMessages}`);
+    parts.push(`# Итоги предыдущих фаз\n${prevPhaseMessages}`);
   }
 
   const currentPhaseMessages = session.messages.filter(
@@ -28,126 +28,128 @@ export function buildAgentContext(
 
   if (currentPhaseMessages.length > 0) {
     const recent = currentPhaseMessages.slice(-MAX_RECENT_MESSAGES);
-    const older = currentPhaseMessages.slice(0, -MAX_RECENT_MESSAGES);
+    parts.push(
+      `# Последние сообщения\n` +
+        recent.map((m) => `**${m.agentName}**: ${m.content}`).join("\n\n")
+    );
+  }
 
-    if (older.length > 0) {
+  // Pass collected ideas for evaluation/refinement
+  if (phase.id === "evaluation" || phase.id === "refinement") {
+    const ideas = session.ideas;
+    if (ideas.length > 0) {
       parts.push(
-        `\n# Ранее в этой фазе (краткое содержание, ${older.length} сообщений)\n` +
-          summarizeMessages(older)
+        `# Идеи для оценки\n` +
+          ideas
+            .map(
+              (i, idx) =>
+                `${idx + 1}. **${i.title}** (от ${i.author}) — ${i.description}${i.score > 0 ? ` [${i.score}/10]` : ""}`
+            )
+            .join("\n")
       );
     }
-
-    parts.push(
-      `\n# Последние сообщения\n` +
-        recent.map((m) => formatMessage(m)).join("\n\n")
-    );
   }
 
-  if (phase.id === "evaluation" || phase.id === "refinement") {
-    const allIdeas = extractIdeasFromMessages(session.messages);
-    if (allIdeas.length > 0) {
-      parts.push(`\n# Все идеи, предложенные ранее\n${allIdeas}`);
-    }
-  }
-
-  if (phase.id === "refinement" && session.ideas.length > 0) {
-    const top = session.ideas
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-    parts.push(
-      `\n# ТОП-3 идеи для доработки\n` +
-        top.map((i, idx) => `${idx + 1}. **${i.title}** (${i.score}/10) — ${i.description}`).join("\n")
-    );
-  }
-
-  return parts.join("\n");
+  return parts.join("\n\n");
 }
 
-function getPreviousPhasesSummary(session: Session, currentPhaseId: string): string | null {
+function getPreviousPhasesSummary(
+  session: Session,
+  currentPhaseId: string
+): string | null {
   const phaseOrder = ["generation", "discussion", "evaluation", "refinement"];
   const currentIdx = phaseOrder.indexOf(currentPhaseId);
   if (currentIdx <= 0) return null;
 
-  const prevPhases = phaseOrder.slice(0, currentIdx);
-  const summaries: string[] = [];
-
-  for (const phaseId of prevPhases) {
-    const msgs = session.messages.filter(
-      (m) => m.phase === phaseId && m.agentId !== "system"
-    );
-    if (msgs.length === 0) continue;
-
-    const phaseDef = session.phases.find((p) => p.id === phaseId);
-    const name = phaseDef ? phaseDef.name : phaseId;
-    summaries.push(`## ${name}\n${summarizeMessages(msgs)}`);
+  // Summarize ideas, not full messages
+  if (session.ideas.length > 0) {
+    return session.ideas
+      .map((i) => `- **${i.title}** (${i.author})${i.score > 0 ? ` ${i.score}/10` : ""}: ${i.description}`)
+      .join("\n");
   }
 
-  return summaries.length > 0 ? summaries.join("\n\n") : null;
-}
-
-function summarizeMessages(messages: ChatMessage[]): string {
-  return messages
-    .map((m) => {
-      const text =
-        m.content.length > 300
-          ? m.content.slice(0, 300) + "..."
-          : m.content;
-      return `**${m.agentName}**: ${text}`;
-    })
+  // Fallback to message summaries
+  const prevMsgs = session.messages.filter(
+    (m) =>
+      phaseOrder.indexOf(m.phase) < currentIdx &&
+      m.agentId !== "system"
+  );
+  return prevMsgs
+    .map((m) => `**${m.agentName}**: ${m.content.length > 200 ? m.content.slice(0, 200) + "..." : m.content}`)
     .join("\n");
 }
 
-function formatMessage(m: ChatMessage): string {
-  return `**${m.agentName}** (${m.type}):\n${m.content}`;
+// ── JSON output format for generation phase ─────────────────
+
+const JSON_FORMAT_GENERATION = `
+ФОРМАТ ВЫВОДА — СТРОГО JSON. Никакого текста вне JSON.
+
+Верни JSON-массив идей:
+[
+  {
+    "title": "Название идеи в 3-5 слов",
+    "hook": "Суть в 1 предложение — зачем это нужно",
+    "description": "Подробнее в 2-3 предложения — как это работает",
+    "feasibility": "легко" | "средне" | "сложно"
+  }
+]
+
+Предложи 3-4 идеи. Каждая КОРОТКАЯ. Название — цепляющее. Hook — одно предложение. Description — максимум 3 предложения.
+НЕ ПОВТОРЯЙ одобренные CEO идеи (спутник, метеорит, луна над Москвой).
+`;
+
+const FORMAT_DISCUSSION = `
+ФОРМАТ: Пиши КОРОТКО. Максимум 150 слов на всё сообщение.
+
+Структура:
+👍 Какая идея зацепила и почему (1-2 предложения)
+👎 Какая слабая и почему (1 предложение)
+💡 Своё предложение или гибрид (2-3 предложения)
+
+Ссылайся на идеи по названию. Не повторяй чужие мысли. Будь конкретен.
+`;
+
+const FORMAT_EVALUATION = `
+ФОРМАТ ВЫВОДА — СТРОГО JSON. Никакого текста вне JSON.
+
+Верни JSON:
+{
+  "scores": [
+    { "title": "Название идеи", "score": 8, "reason": "Почему такой балл — 1 предложение" }
+  ],
+  "top3": ["Название 1", "Название 2", "Название 3"]
 }
 
-function extractIdeasFromMessages(messages: ChatMessage[]): string {
-  const genMessages = messages.filter(
-    (m) => m.phase === "generation" && m.agentId !== "system"
-  );
-  return genMessages
-    .map((m) => `### Идеи от ${m.agentName}\n${m.content}`)
-    .join("\n\n");
-}
+Оцени ВСЕ идеи по шкале 1-10 с позиции своей экспертизы.
+`;
 
-const FORMAT_RULES = `
-## ФОРМАТ ОТВЕТА (СТРОГО СОБЛЮДАЙ)
+const FORMAT_REFINEMENT = `
+ФОРМАТ: Для каждой топ-идеи пиши КОРОТКО:
 
-Пиши КОМПАКТНО. Без таблиц. Без ASCII-art. Без длинных вступлений.
+**Название идеи**
+- Первый шаг: что делать завтра (1 предложение)
+- Бюджет: примерная сумма и срок
+- Главный риск: и как минимизировать (1 предложение)
+- KPI: как измерить успех (1-2 метрики)
 
-В фазе ГЕНЕРАЦИИ — каждая идея в формате:
-**1. Название идеи**
-Суть: 1-2 предложения
-Почему сработает: 1 предложение
-Реализуемость: легко / средне / сложно
-
-В фазе ОБСУЖДЕНИЯ:
-- Называй идеи по имени: "Идея X от [Агент]"
-- Пиши коротко: 1-2 абзаца максимум
-- Структура: что нравится → что не так → предложение
-
-В фазе ОЦЕНКИ:
-**Название идеи**: X/10 — обоснование в 1 предложение
-(повторить для каждой идеи, потом ТОП-3)
-
-В фазе ДОРАБОТКИ:
-Для каждой топ-идеи: первый шаг → бюджет → риски → KPI (по 1 предложению)
-
-НЕ ИСПОЛЬЗУЙ: таблицы, нумерованные списки длиннее 5 пунктов, markdown-заголовки глубже ##.
-ИСПОЛЬЗУЙ: жирный текст для названий, короткие абзацы, эмодзи умеренно.
+Максимум 100 слов на идею. Без вступлений.
 `;
 
 export function buildSystemPrompt(
   agent: AgentConfig,
-  brandContext: string
+  brandContext: string,
+  phaseId?: string
 ): string {
+  let formatBlock = "";
+  if (phaseId === "generation") formatBlock = JSON_FORMAT_GENERATION;
+  else if (phaseId === "discussion") formatBlock = FORMAT_DISCUSSION;
+  else if (phaseId === "evaluation") formatBlock = FORMAT_EVALUATION;
+  else if (phaseId === "refinement") formatBlock = FORMAT_REFINEMENT;
+
   return `${agent.systemPrompt}
 
-Ты участвуешь в круглом столе как "${agent.name}".
-Твоя роль: ${agent.role}.
-Области экспертизы: ${agent.expertise.join(", ")}.
-
-Обращайся к другим участникам по имени. Будь конкретен. Отвечай на русском языке.
-${FORMAT_RULES}
+Ты "${agent.name}" в круглом столе. Роль: ${agent.role}. Экспертиза: ${agent.expertise.join(", ")}.
+Отвечай на русском. Будь конкретен.
+${formatBlock}
 ${brandContext}`;
 }

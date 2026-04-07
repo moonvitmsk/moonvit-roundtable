@@ -1,7 +1,61 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatMessage, Phase, Session } from "@/lib/types";
+import type { AgentConfig, ChatMessage, Session } from "@/lib/types";
 import { buildAgentContext, buildSystemPrompt } from "@/lib/context-manager";
 import { useAgentStream } from "./useAgentStream";
+
+// Parse JSON arrays from generation/evaluation, split into individual messages
+function parseAgentResponse(
+  message: ChatMessage,
+  phaseId: string,
+  agent: AgentConfig
+): ChatMessage[] {
+  const raw = message.content.trim();
+
+  // Try to extract JSON from response
+  const jsonMatch = raw.match(/\[[\s\S]*\]/)?.[0] || raw.match(/\{[\s\S]*\}/)?.[0];
+
+  if (phaseId === "generation" && jsonMatch) {
+    try {
+      const ideas = JSON.parse(jsonMatch);
+      if (Array.isArray(ideas) && ideas.length > 0) {
+        return ideas.map((idea: { title?: string; hook?: string; description?: string; feasibility?: string }, idx: number) => ({
+          id: crypto.randomUUID(),
+          agentId: agent.id,
+          agentName: agent.name,
+          agentColor: agent.color,
+          agentAvatar: agent.avatar,
+          content: `**${idea.title || `Идея ${idx + 1}`}**\n${idea.hook || ""}\n\n${idea.description || ""}${idea.feasibility ? `\n\n_Реализуемость: ${idea.feasibility}_` : ""}`,
+          thinking: message.thinking,
+          phase: message.phase,
+          round: message.round,
+          timestamp: Date.now() + idx,
+          type: "idea" as const,
+        }));
+      }
+    } catch { /* not valid JSON, fall through */ }
+  }
+
+  if (phaseId === "evaluation" && jsonMatch) {
+    try {
+      const data = JSON.parse(jsonMatch);
+      const scores = data.scores || (Array.isArray(data) ? data : []);
+      if (scores.length > 0) {
+        const scoreText = scores
+          .map((s: { title?: string; score?: number; reason?: string }) => `**${s.title}**: ${s.score}/10 — ${s.reason}`)
+          .join("\n");
+        const top3 = data.top3 ? `\n\n🏆 Мой ТОП-3: ${data.top3.join(", ")}` : "";
+        return [{
+          ...message,
+          content: scoreText + top3,
+          type: "critique" as const,
+        }];
+      }
+    } catch { /* fall through */ }
+  }
+
+  // Fallback: return as-is
+  return [message];
+}
 
 export function useRoundtable(initialSession: Session) {
   const [session, setSession] = useState<Session>(initialSession);
@@ -9,10 +63,16 @@ export function useRoundtable(initialSession: Session) {
   const sessionRef = useRef<Session>(initialSession);
   const pauseRef = useRef(false);
   const runningRef = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keep ref in sync with state
+  // Keep ref in sync + debounced auto-save
   useEffect(() => {
     sessionRef.current = session;
+    // Debounced auto-save
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      import("@/lib/supabase").then(({ saveSession }) => saveSession(session));
+    }, 2000);
   }, [session]);
 
   const {
@@ -76,7 +136,7 @@ export function useRoundtable(initialSession: Session) {
 
         if (!agent || !phase) break;
 
-        const systemPrompt = buildSystemPrompt(agent, cur.brandContext);
+        const systemPrompt = buildSystemPrompt(agent, cur.brandContext, phase.id);
         const userMessage = buildAgentContext(cur, agent, phase);
 
         let message: ChatMessage | null = null;
@@ -93,13 +153,15 @@ export function useRoundtable(initialSession: Session) {
           break;
         }
 
-        // If message is null or empty — stop, don't loop
         if (!message || !message.content.trim()) {
           if (!pauseRef.current) {
             setError("Агент вернул пустой ответ. Проверьте что сервер запущен (npm run server).");
           }
           break;
         }
+
+        // Parse JSON responses for generation/evaluation — split into individual messages + ideas
+        const parsedMessages = parseAgentResponse(message, phase.id, agent);
 
         // Advance turn
         let nextAgentIndex = cur.currentAgentIndex + 1;
@@ -119,9 +181,25 @@ export function useRoundtable(initialSession: Session) {
           }
         }
 
+        // Collect ideas from parsed messages
+        const newIdeas = parsedMessages
+          .filter((m) => m.type === "idea")
+          .map((m) => ({
+            id: m.id,
+            title: m.content.split("\n")[0]?.replace(/^\*\*|\*\*$/g, "") || "",
+            description: m.content.split("\n").slice(1).join(" ").trim(),
+            author: agent.name,
+            supporters: [],
+            critics: [],
+            score: 0,
+            phase: phase.id,
+            tags: [],
+          }));
+
         updateSession((prev) => ({
           ...prev,
-          messages: [...prev.messages, message!],
+          messages: [...prev.messages, ...parsedMessages],
+          ideas: [...prev.ideas, ...newIdeas],
           currentAgentIndex: nextAgentIndex,
           currentRound: nextRound,
           currentPhase: nextPhase,
