@@ -18,6 +18,20 @@
 
 html { color-scheme: dark; }
 
+/* Light theme override */
+html.light {
+  color-scheme: light;
+  --color-bg: #f8f8fc;
+  --color-bg-alt: #f0f0f8;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f3f3fa;
+  --color-border: #e2e2ee;
+  --color-border-light: #d0d0e0;
+  --color-text-primary: #1a1a2e;
+  --color-text-secondary: #52526a;
+  --color-text-muted: #8888a0;
+}
+
 body {
   background: linear-gradient(180deg, var(--color-bg) 0%, var(--color-bg-alt) 100%);
   color: var(--color-text-primary);

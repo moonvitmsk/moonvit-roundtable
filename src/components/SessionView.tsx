@@ -6,6 +6,7 @@ import { PhaseIndicator } from "./PhaseIndicator";
 import { ControlPanel } from "./ControlPanel";
 import { IdeaCards } from "./IdeaCards";
 import { ArrowLeft } from "lucide-react";
+import { ThemeToggle } from "./ThemeToggle";
 
 const VERSION = "0.1.0";
 
@@ -79,6 +80,7 @@ export function SessionView({ session: initialSession, onBack }: Props) {
             onSkipPhase={skipPhase}
             onExport={handleExport}
           />
+          <ThemeToggle />
         </div>
       </header>
 

@@ -6,6 +6,7 @@ import { MOONVIT_BRAND_CONTEXT } from "@/lib/brand-context";
 import { TemplateCard } from "@/components/TemplateCard";
 import { SessionSetup } from "@/components/SessionSetup";
 import { SessionView } from "@/components/SessionView";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const VERSION = "0.1.0";
 
@@ -54,13 +55,16 @@ export default function App() {
   return (
     <div className="min-h-screen">
       <header className="border-b border-[var(--color-border)] px-6 py-4">
-        <div className="max-w-5xl mx-auto flex items-center gap-3">
-          <h1 className="text-base font-semibold text-[var(--color-text-primary)]">
-            moonvit roundtable
-          </h1>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface)] text-[var(--color-text-muted)]">
-            v{VERSION}
-          </span>
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-base font-semibold text-[var(--color-text-primary)]">
+              moonvit roundtable
+            </h1>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface)] text-[var(--color-text-muted)]">
+              v{VERSION}
+            </span>
+          </div>
+          <ThemeToggle />
         </div>
       </header>
 
