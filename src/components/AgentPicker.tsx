@@ -129,6 +129,18 @@ export function AgentPicker({ agents, onChange }: Props) {
                     className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] resize-none"
                   />
                 </div>
+                <div>
+                  <label className="text-xs text-[var(--color-text-muted)] block mb-1">
+                    Промпт вывода <span className="text-[var(--color-text-muted)]">(формат ответа, опционально)</span>
+                  </label>
+                  <textarea
+                    value={agent.outputPrompt || ""}
+                    onChange={(e) => updateAgent(agent.id, "outputPrompt", e.target.value)}
+                    rows={3}
+                    placeholder="Оставьте пустым для формата по умолчанию. Или задайте свой: 'Выводи строго в JSON...'"
+                    className="w-full bg-[var(--color-bg)] border border-[var(--color-border)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-primary)] resize-none font-mono"
+                  />
+                </div>
               </div>
             )}
           </div>

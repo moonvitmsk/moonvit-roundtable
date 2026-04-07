@@ -3,6 +3,7 @@ export interface AgentConfig {
   name: string;
   role: string;
   systemPrompt: string;
+  outputPrompt?: string;  // формат вывода, отдельно от system prompt
   avatar: string;
   color: string;
   expertise: string[];

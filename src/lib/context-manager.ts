@@ -140,11 +140,16 @@ export function buildSystemPrompt(
   brandContext: string,
   phaseId?: string
 ): string {
+  // outputPrompt агента имеет приоритет над дефолтным форматом фазы
   let formatBlock = "";
-  if (phaseId === "generation") formatBlock = JSON_FORMAT_GENERATION;
-  else if (phaseId === "discussion") formatBlock = FORMAT_DISCUSSION;
-  else if (phaseId === "evaluation") formatBlock = FORMAT_EVALUATION;
-  else if (phaseId === "refinement") formatBlock = FORMAT_REFINEMENT;
+  if (agent.outputPrompt) {
+    formatBlock = agent.outputPrompt;
+  } else {
+    if (phaseId === "generation") formatBlock = JSON_FORMAT_GENERATION;
+    else if (phaseId === "discussion") formatBlock = FORMAT_DISCUSSION;
+    else if (phaseId === "evaluation") formatBlock = FORMAT_EVALUATION;
+    else if (phaseId === "refinement") formatBlock = FORMAT_REFINEMENT;
+  }
 
   return `${agent.systemPrompt}
 
