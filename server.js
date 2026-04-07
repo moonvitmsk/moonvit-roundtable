@@ -16,7 +16,7 @@ function sendSSE(res, data) {
 }
 
 // ── Run Claude CLI ──────────────────────────────────────────
-function runClaude(key, systemPrompt, userMessage, { onChunk, signal } = {}) {
+function runClaude(key, systemPrompt, userMessage, { onChunk } = {}) {
   return new Promise((resolveP) => {
     const fullPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
 
@@ -33,20 +33,13 @@ function runClaude(key, systemPrompt, userMessage, { onChunk, signal } = {}) {
     const proc = spawn(process.execPath, args, {
       cwd: process.cwd(),
       shell: false,
-      env: { ...process.env, FORCE_COLOR: "0", NODE_OPTIONS: "--no-deprecation" },
+      env: { ...process.env, FORCE_COLOR: "0" },
     });
     proc.stdin.setDefaultEncoding("utf8");
     proc.stdin.write(Buffer.from(fullPrompt, "utf8"));
     proc.stdin.end();
 
     activeProcesses.set(key, proc);
-
-    if (signal) {
-      signal.addEventListener("abort", () => {
-        proc.kill("SIGTERM");
-        activeProcesses.delete(key);
-      }, { once: true });
-    }
 
     let fullText = "";
     let buffer = "";
@@ -77,7 +70,12 @@ function runClaude(key, systemPrompt, userMessage, { onChunk, signal } = {}) {
               if (onChunk) onChunk({ type: "text", text: msg.delta.text });
             }
           } else if (msg.type === "result") {
-            if (msg.result) fullText = msg.result;
+            if (msg.result && !fullText.trim()) {
+              fullText = msg.result;
+              if (onChunk) onChunk({ type: "text", text: msg.result });
+            } else if (msg.result) {
+              fullText = msg.result;
+            }
           }
         } catch {}
       }
@@ -99,10 +97,11 @@ function runClaude(key, systemPrompt, userMessage, { onChunk, signal } = {}) {
 
 // ── POST /api/chat — SSE stream ─────────────────────────────
 app.post("/api/chat", (req, res) => {
-  const { systemPrompt, userMessage, agentMeta } = req.body;
+  const { systemPrompt, userMessage, agentMeta } = req.body || {};
 
   if (!systemPrompt || !userMessage || !agentMeta) {
-    return res.status(400).json({ error: "Missing required fields" });
+    res.status(400).json({ error: "Missing required fields" });
+    return;
   }
 
   res.writeHead(200, {
@@ -115,19 +114,22 @@ app.post("/api/chat", (req, res) => {
   sendSSE(res, { type: "agent_meta", agent: agentMeta });
 
   const key = `agent-${agentMeta.id}-${Date.now()}`;
-  const ac = new AbortController();
+  let clientDisconnected = false;
 
-  req.on("close", () => ac.abort());
+  req.on("close", () => {
+    clientDisconnected = true;
+  });
 
   runClaude(key, systemPrompt, userMessage, {
-    signal: ac.signal,
-    onChunk: (chunk) => sendSSE(res, chunk),
+    onChunk: (chunk) => {
+      if (!clientDisconnected && !res.writableEnded) sendSSE(res, chunk);
+    },
   }).then(({ fullText, error }) => {
-    if (error) {
-      sendSSE(res, { type: "error", error });
+    if (!res.writableEnded) {
+      if (error) sendSSE(res, { type: "error", error });
+      sendSSE(res, { type: "done", fullText });
+      res.end();
     }
-    sendSSE(res, { type: "done", fullText });
-    res.end();
   });
 });
 
@@ -143,7 +145,6 @@ app.post("/api/abort", (req, res) => {
     activeProcesses.get(key).kill("SIGTERM");
     activeProcesses.delete(key);
   }
-  // Kill all if no key
   if (!key) {
     for (const [k, proc] of activeProcesses) {
       proc.kill("SIGTERM");
