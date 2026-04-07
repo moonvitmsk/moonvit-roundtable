@@ -1,46 +1,20 @@
-"use client";
-
-import { useEffect, useState, use } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import type { Session } from "@/lib/types";
 import { useRoundtable } from "@/hooks/useRoundtable";
-import { RoundtableChat } from "@/components/RoundtableChat";
-import { PhaseIndicator } from "@/components/PhaseIndicator";
-import { ControlPanel } from "@/components/ControlPanel";
-import { IdeaCards } from "@/components/IdeaCards";
+import { RoundtableChat } from "./RoundtableChat";
+import { PhaseIndicator } from "./PhaseIndicator";
+import { ControlPanel } from "./ControlPanel";
+import { IdeaCards } from "./IdeaCards";
+import { ArrowLeft } from "lucide-react";
 
 const VERSION = "0.1.0";
 
-export default function SessionPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
-  const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
-
-  useEffect(() => {
-    const stored = sessionStorage.getItem(`session-${id}`);
-    if (stored) {
-      setSession(JSON.parse(stored));
-    } else {
-      router.push("/");
-    }
-  }, [id, router]);
-
-  if (!session) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-sm text-[var(--color-text-muted)]">Загрузка...</div>
-      </div>
-    );
-  }
-
-  return <SessionView session={session} />;
+interface Props {
+  session: Session;
+  onBack: () => void;
 }
 
-function SessionView({ session: initialSession }: { session: Session }) {
+export function SessionView({ session: initialSession, onBack }: Props) {
   const {
     session,
     isStreaming,
@@ -78,14 +52,14 @@ function SessionView({ session: initialSession }: { session: Session }) {
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Header */}
       <header className="flex items-center justify-between gap-4 border-b border-[var(--color-border)] px-4 py-2.5 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           <button
-            onClick={() => window.location.href = "/"}
-            className="text-sm font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors shrink-0"
+            onClick={onBack}
+            className="flex items-center gap-1 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors shrink-0"
           >
-            moonvit roundtable
+            <ArrowLeft size={14} />
+            <span className="hidden sm:inline">moonvit roundtable</span>
           </button>
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface)] text-[var(--color-text-muted)] shrink-0">
             v{VERSION}
@@ -97,10 +71,7 @@ function SessionView({ session: initialSession }: { session: Session }) {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <PhaseIndicator
-            phases={session.phases}
-            currentPhase={session.currentPhase}
-          />
+          <PhaseIndicator phases={session.phases} currentPhase={session.currentPhase} />
           <ControlPanel
             status={session.status}
             onPause={pause}
@@ -111,14 +82,12 @@ function SessionView({ session: initialSession }: { session: Session }) {
         </div>
       </header>
 
-      {/* Error */}
       {error && (
         <div className="bg-red-500/10 border-b border-red-500/20 px-4 py-2 text-xs text-red-400">
           {error}
         </div>
       )}
 
-      {/* Main */}
       <RoundtableChat
         messages={session.messages}
         agents={session.agents}
@@ -130,7 +99,6 @@ function SessionView({ session: initialSession }: { session: Session }) {
         onIntervene={intervene}
       />
 
-      {/* Ideas */}
       <IdeaCards ideas={session.ideas} />
     </div>
   );

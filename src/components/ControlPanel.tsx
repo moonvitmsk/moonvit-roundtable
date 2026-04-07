@@ -1,4 +1,3 @@
-"use client";
 
 import { Pause, Play, SkipForward, Download } from "lucide-react";
 

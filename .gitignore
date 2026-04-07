@@ -1,4 +1,5 @@
 node_modules/
+dist/
 .next/
 out/
 .env
@@ -6,3 +7,4 @@ out/
 .env.production.local
 *.tsbuildinfo
 next-env.d.ts
+.vercel

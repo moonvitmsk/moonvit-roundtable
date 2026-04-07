@@ -1,4 +1,3 @@
-"use client";
 
 import type { RoundtableTemplate } from "@/lib/types";
 import { ArrowRight } from "lucide-react";

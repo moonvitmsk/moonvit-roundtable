@@ -1,4 +1,3 @@
-"use client";
 
 import type { Phase } from "@/lib/types";
 
