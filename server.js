@@ -18,7 +18,7 @@ function sendSSE(res, data) {
 // ── Run Claude CLI ──────────────────────────────────────────
 function runClaude(key, systemPrompt, userMessage, { onChunk } = {}) {
   return new Promise((resolveP) => {
-    const fullPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
+    const fullPrompt = userMessage;
 
     const args = [
       resolve("node_modules/@anthropic-ai/claude-code/cli.js"),
@@ -28,10 +28,13 @@ function runClaude(key, systemPrompt, userMessage, { onChunk } = {}) {
       "--permission-mode", "bypassPermissions",
       "--model", "opus",
       "--allowedTools", "",
+      "--system-prompt", systemPrompt,
     ];
 
+    // Use OS temp dir as cwd — must be outside D:\DX tree to avoid CLAUDE.md
+    const sandboxDir = process.env.TEMP || process.env.TMP || "/tmp";
     const proc = spawn(process.execPath, args, {
-      cwd: process.cwd(),
+      cwd: sandboxDir,
       shell: false,
       env: { ...process.env, FORCE_COLOR: "0" },
     });

@@ -81,6 +81,10 @@ export function useAgentStream() {
               } else if (data.type === "text") {
                 fullText += data.text;
                 setState((s) => ({ ...s, streamingText: fullText }));
+              } else if (data.type === "done" && data.fullText && !fullText.trim()) {
+                // Server sent final text via CLI result, use it
+                fullText = data.fullText;
+                setState((s) => ({ ...s, streamingText: fullText }));
               } else if (data.type === "error") {
                 throw new Error(data.error);
               }
@@ -96,7 +100,7 @@ export function useAgentStream() {
           agentName: agent.name,
           agentColor: agent.color,
           agentAvatar: agent.avatar,
-          content: fullText,
+          content: fullText.replace(/^\n+/, ""),
           thinking: fullThinking || undefined,
           phase,
           round,
